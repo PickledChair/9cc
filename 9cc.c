@@ -210,6 +210,19 @@ void gen(Node *node) {
     printf("  push rax\n");
 }
 
+// 入力文字列の先頭が指定した文字列から始まっているかどうかを返す
+bool startswith(char *p, char *q) {
+    return memcmp(p, q, strlen(q)) == 0;
+}
+
+int read_punct(char *p) {
+    if (startswith(p, "==") || startswith(p, "!=") ||
+        startswith(p, "<=") || startswith(p, ">="))
+        return 2;
+    
+    return ispunct(*p) ? 1 : 0;
+}
+
 // 入力文字列pをトークナイズしてそれを返す
 Token *tokenize() {
     char *p = user_input;
@@ -224,9 +237,10 @@ Token *tokenize() {
             continue;
         }
 
-        if (*p == '+' || *p == '-' || *p == '*' || *p == '/' || *p == '(' || *p == ')') {
-            cur = new_token(TK_RESERVED, cur, p, p + 1);
-            p++;
+        int punct_len = read_punct(p);
+        if (punct_len) {
+            cur = new_token(TK_RESERVED, cur, p, p + punct_len);
+            p += cur->len;
             continue;
         }
 
