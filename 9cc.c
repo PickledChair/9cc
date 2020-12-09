@@ -48,6 +48,10 @@ typedef enum {
     ND_SUB, // -
     ND_MUL, // *
     ND_DIV, // /
+    ND_EQ,  // ==
+    ND_NE,  // !=
+    ND_LT,  // <
+    ND_LE,  // <=
     ND_NUM, // 整数
 } NodeKind;
 
@@ -60,6 +64,15 @@ struct Node {
     Node *rhs;     // 右辺
     int val;       // kindがND_NUMの場合のみ使う
 };
+
+// トークンが指定した演算子であるかどうかを返す
+bool equal(Token *tok, char *op) {
+    if (memcmp(tok->str, op, tok->len) == 0 && op[tok->len] == '\0') {
+        token = token->next;
+        return true;
+    }
+    return false;
+}
 
 // 次のトークンが期待している記号のときには、トークンを１つ読み進めて
 // 真を返す。それ以外の場合には偽を返す。
@@ -78,7 +91,7 @@ void expect(char *op) {
     if (token->kind != TK_RESERVED ||
         strlen(op) != token->len ||
         memcmp(token->str, op, token->len))
-        error_at(token->str, "'%c'ではありません", op);
+        error_at(token->str, "\"%s\"ではありません", op);
     token = token->next;
 }
 
@@ -124,12 +137,72 @@ Node *new_node_num(int val) {
 }
 
 Node *expr();
+Node *equality();
+Node *relational();
+Node *add();
 Node *mul();
 Node *unary();
 Node *primary();
 
 // exprをパースする
+// expr = equality
 Node *expr() {
+    return equality();
+}
+
+// equalityをパースする
+// equality = relational ("==" relational | "!=" relational)*
+Node *equality() {
+    Node *node = relational();
+
+    for (;;) {
+        if (equal(token, "==")) {
+            node = new_node(ND_EQ, node, relational());
+            continue;
+        }
+
+        if (equal(token, "!=")) {
+            node = new_node(ND_NE, node, relational());
+            continue;
+        }
+
+        return node;
+    }
+}
+
+// relationalをパースする
+// relational = add ("<" add | "<=" add | ">" add | ">=" add)*
+Node *relational() {
+    Node *node = add();
+
+    for (;;) {
+        if (equal(token, "<")) {
+            node = new_node(ND_LT, node, add());
+            continue;
+        }
+
+        if (equal(token, "<=")) {
+            node = new_node(ND_LE, node, add());
+            continue;
+        }
+
+        if (equal(token, ">")) {
+            node = new_node(ND_LT, add(), node);
+            continue;
+        }
+
+        if (equal(token, ">=")) {
+            node = new_node(ND_LE, add(), node);
+            continue;
+        }
+
+        return node;
+    }
+}
+
+// addをパースする
+// add = mul ("+" mul | "-" mul)*
+Node *add() {
     Node *node = mul();
 
     for (;;) {
@@ -143,6 +216,7 @@ Node *expr() {
 }
 
 // mulをパースする
+// mul = unary ("*" unary | "/" unary)*
 Node *mul() {
     Node *node = unary();
 
@@ -157,15 +231,17 @@ Node *mul() {
 }
 
 // unaryをパースする
+// unary = ("+" | "-")? unary | primary
 Node *unary() {
     if (consume("+"))
-        return primary();
+        return unary();
     if (consume("-"))
-        return new_node(ND_SUB, new_node_num(0), primary());
+        return new_node(ND_SUB, new_node_num(0), unary());
     return primary();
 }
 
 // primaryをパースする
+// primary = num | "(" expr ")"
 Node *primary() {
     // 次のトークンが"("なら、"(" expr ")"のはず
     if (consume("(")) {
@@ -204,6 +280,23 @@ void gen(Node *node) {
         case ND_DIV:
             printf("  cqo\n");
             printf("  idiv rdi\n");
+            break;
+        case ND_EQ:
+        case ND_NE:
+        case ND_LT:
+        case ND_LE:
+            printf("  cmp rax, rdi\n");
+
+            if (node->kind == ND_EQ)
+                printf("  sete al\n");
+            else if (node->kind == ND_NE)
+                printf("  setne al\n");
+            else if (node->kind == ND_LT)
+                printf("  setl al\n");
+            else if (node->kind == ND_LE)
+                printf("  setle al\n");
+            
+            printf("  movzb rax, al\n");
             break;
     }
 
