@@ -295,7 +295,7 @@ void gen(Node *node) {
                 printf("  setl al\n");
             else if (node->kind == ND_LE)
                 printf("  setle al\n");
-            
+
             printf("  movzb rax, al\n");
             break;
     }
