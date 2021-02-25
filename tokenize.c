@@ -62,7 +62,6 @@ Token *new_token(TokenKind kind, char *start, char *end) {
     tok->kind = kind;
     tok->str = start;
     tok->len = end - start;
-    // cur->next = tok;
     return tok;
 }
 
@@ -81,7 +80,6 @@ int read_punct(char *p) {
 
 // 入力文字列pをトークナイズしてそれを返す
 Token *tokenize(char *p) {
-    // char *p = user_input;
     user_input = p;
     Token head = {};
     head.next = NULL;
