@@ -13,20 +13,20 @@ static void pop(char *arg) {
 }
 
 // 抽象構文木にしたがって再帰的にアセンブリを出力する
-void gen(Node *node) {
+void gen_expr(Node *node) {
     switch(node->kind) {
     case ND_NUM:
         printf("  mov $%d, %%rax\n", node->val);
         return;
     case ND_NEG:
-        gen(node->lhs);
+        gen_expr(node->lhs);
         printf("  neg %%rax\n");
         return;
     }
 
-    gen(node->rhs);
+    gen_expr(node->rhs);
     push();
-    gen(node->lhs);
+    gen_expr(node->lhs);
     pop("%rdi");
 
     switch (node->kind) {
@@ -71,7 +71,7 @@ void codegen(Node *node) {
     printf("main:\n");
 
     // 抽象構文木を下りながらコード生成
-    gen(node);
+    gen_expr(node);
 
     // RAX に式を計算した結果が残っているので、
     // それをそのまま返す
