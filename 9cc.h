@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <ctype.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -27,11 +28,11 @@ struct Token {
     int len;        // トークンの長さ
 };
 
+void error(char *fmt, ...);
 void error_at(char *loc, char *fmt, ...);
 void error_tok(Token *tok, char *fmt, ...);
 bool equal(Token *tok, char *op);
-void expect(Token **rest, Token *tok, char *op);
-int expect_number(Token **rest, Token *tok);
+Token *skip(Token *tok, char *op);
 Token *tokenize(char *input);
 
 //
@@ -43,6 +44,7 @@ typedef enum {
     ND_SUB, // -
     ND_MUL, // *
     ND_DIV, // /
+    ND_NEG, // 単項演算子の -
     ND_EQ,  // ==
     ND_NE,  // !=
     ND_LT,  // <

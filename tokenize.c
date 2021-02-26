@@ -3,6 +3,14 @@
 // 入力プログラム
 static char *user_input;
 
+void error(char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    fprintf(stderr, "\n");
+    exit(1);
+}
+
 void verror_at(char *loc, char *fmt, va_list ap) {
     int pos = loc - user_input;
     fprintf(stderr, "%s\n", user_input);
@@ -29,31 +37,15 @@ void error_tok(Token *tok, char *fmt, ...) {
 
 // トークンが指定した演算子であるかどうかを返す
 bool equal(Token *tok, char *op) {
-    if (memcmp(tok->loc, op, tok->len) == 0 && op[tok->len] == '\0') {
-        tok = tok->next;
-        return true;
-    }
-    return false;
+    return memcmp(tok->loc, op, tok->len) == 0 && op[tok->len] == '\0';
 }
 
 // 次のトークンが期待している記号のときには、トークンを１つ読み進める。
 // それ以外の場合にはエラーを報告する。
-void expect(Token **rest, Token *tok, char *op) {
-    if (tok->kind != TK_RESERVED ||
-        strlen(op) != tok->len ||
-        memcmp(tok->loc, op, tok->len))
-        error_at(tok->loc, "\"%s\"ではありません", op);
-    *rest = tok->next;
-}
-
-// 次のトークンが数値の場合、トークンを１つ読み進めてその数値を返す。
-// それ以外の場合にはエラーを報告する。
-int expect_number(Token **rest, Token *tok) {
-    if (tok->kind != TK_NUM)
-        error_at(tok->loc, "数ではありません");
-    int val = tok->val;
-    *rest = tok->next;
-    return val;
+Token *skip(Token *tok, char *op) {
+    if (!equal(tok, op))
+        error_tok(tok, "演算子 '%s' が必要です", op);
+    return tok->next;
 }
 
 // 新しいトークンを作成してcurに繋げる

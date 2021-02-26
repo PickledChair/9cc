@@ -1,65 +1,81 @@
 #include "9cc.h"
 
+static int depth;
+
+static void push(void) {
+    printf("  push %%rax\n");
+    depth++;
+}
+
+static void pop(char *arg) {
+    printf("  pop %s\n", arg);
+    depth--;
+}
+
 // 抽象構文木にしたがって再帰的にアセンブリを出力する
 void gen(Node *node) {
-    if (node->kind == ND_NUM) {
-        printf("  push %d\n", node->val);
+    switch(node->kind) {
+    case ND_NUM:
+        printf("  mov $%d, %%rax\n", node->val);
+        return;
+    case ND_NEG:
+        gen(node->lhs);
+        printf("  neg %%rax\n");
         return;
     }
 
-    gen(node->lhs);
     gen(node->rhs);
-
-    printf("  pop rdi\n");
-    printf("  pop rax\n");
+    push();
+    gen(node->lhs);
+    pop("%rdi");
 
     switch (node->kind) {
         case ND_ADD:
-            printf("  add rax, rdi\n");
-            break;
+            printf("  add %%rdi, %%rax\n");
+            return;
         case ND_SUB:
-            printf("  sub rax, rdi\n");
-            break;
+            printf("  sub %%rdi, %%rax\n");
+            return;
         case ND_MUL:
-            printf("  imul rax, rdi\n");
-            break;
+            printf("  imul %%rdi, %%rax\n");
+            return;
         case ND_DIV:
             printf("  cqo\n");
-            printf("  idiv rdi\n");
-            break;
+            printf("  idiv %%rdi\n");
+            return;
         case ND_EQ:
         case ND_NE:
         case ND_LT:
         case ND_LE:
-            printf("  cmp rax, rdi\n");
+            printf("  cmp %%rdi, %%rax\n");
 
             if (node->kind == ND_EQ)
-                printf("  sete al\n");
+                printf("  sete %%al\n");
             else if (node->kind == ND_NE)
-                printf("  setne al\n");
+                printf("  setne %%al\n");
             else if (node->kind == ND_LT)
-                printf("  setl al\n");
+                printf("  setl %%al\n");
             else if (node->kind == ND_LE)
-                printf("  setle al\n");
+                printf("  setle %%al\n");
 
-            printf("  movzb rax, al\n");
-            break;
+            printf("  movzb %%al, %%rax\n");
+            return;
     }
 
-    printf("  push rax\n");
+    error("正しくない式です");
 }
 
 void codegen(Node *node) {
     // アセンブリの前半部分を出力
-    printf(".intel_syntax noprefix\n");
-    printf(".globl main\n");
+    printf("  .globl main\n");
     printf("main:\n");
 
     // 抽象構文木を下りながらコード生成
     gen(node);
 
-    // スタックトップに式全体の値が残っているはずなので
-    // それをRAXにロードして関数からの返り値とする
-    printf("  pop rax\n");
+    // RAX に式を計算した結果が残っているので、
+    // それをそのまま返す
     printf("  ret\n");
+
+    assert(depth == 0);
 }
