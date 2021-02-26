@@ -24,12 +24,12 @@ void error_at(char *loc, char *fmt, ...) {
 void error_tok(Token *tok, char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    verror_at(tok->str, fmt, ap);
+    verror_at(tok->loc, fmt, ap);
 }
 
 // トークンが指定した演算子であるかどうかを返す
 bool equal(Token *tok, char *op) {
-    if (memcmp(tok->str, op, tok->len) == 0 && op[tok->len] == '\0') {
+    if (memcmp(tok->loc, op, tok->len) == 0 && op[tok->len] == '\0') {
         tok = tok->next;
         return true;
     }
@@ -41,8 +41,8 @@ bool equal(Token *tok, char *op) {
 void expect(Token **rest, Token *tok, char *op) {
     if (tok->kind != TK_RESERVED ||
         strlen(op) != tok->len ||
-        memcmp(tok->str, op, tok->len))
-        error_at(tok->str, "\"%s\"ではありません", op);
+        memcmp(tok->loc, op, tok->len))
+        error_at(tok->loc, "\"%s\"ではありません", op);
     *rest = tok->next;
 }
 
@@ -50,7 +50,7 @@ void expect(Token **rest, Token *tok, char *op) {
 // それ以外の場合にはエラーを報告する。
 int expect_number(Token **rest, Token *tok) {
     if (tok->kind != TK_NUM)
-        error_at(tok->str, "数ではありません");
+        error_at(tok->loc, "数ではありません");
     int val = tok->val;
     *rest = tok->next;
     return val;
@@ -60,7 +60,7 @@ int expect_number(Token **rest, Token *tok) {
 Token *new_token(TokenKind kind, char *start, char *end) {
     Token *tok = calloc(1, sizeof(Token));
     tok->kind = kind;
-    tok->str = start;
+    tok->loc = start;
     tok->len = end - start;
     return tok;
 }
