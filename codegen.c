@@ -65,17 +65,28 @@ void gen_expr(Node *node) {
     error("正しくない式です");
 }
 
+static void gen_stmt(Node *node) {
+    if (node->kind == ND_EXPR_STMT) {
+        // expr以下の抽象構文木を下りながらコード生成
+        gen_expr(node->lhs);
+        return;
+    }
+
+    error("正しくない文です");
+}
+
 void codegen(Node *node) {
     // アセンブリの前半部分を出力
     printf("  .globl main\n");
     printf("main:\n");
 
-    // 抽象構文木を下りながらコード生成
-    gen_expr(node);
+    // stmtノードを順番に辿ってコード生成
+    for (Node *n = node; n; n = n->next) {
+        gen_stmt(n);
+        assert(depth == 0);
+    }
 
     // RAX に式を計算した結果が残っているので、
     // それをそのまま返す
     printf("  ret\n");
-
-    assert(depth == 0);
 }

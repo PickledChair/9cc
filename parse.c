@@ -29,6 +29,8 @@ static Node *new_num(int val) {
     return node;
 }
 
+static Node *stmt(Token **rest, Token *tok);
+static Node *expr_stmt(Token **rest, Token *tok);
 static Node *expr(Token **rest, Token *tok);
 static Node *equality(Token **rest, Token *tok);
 static Node *relational(Token **rest, Token *tok);
@@ -36,6 +38,20 @@ static Node *add(Token **rest, Token *tok);
 static Node *mul(Token **rest, Token *tok);
 static Node *unary(Token **rest, Token *tok);
 static Node *primary(Token **rest, Token *tok);
+
+// stmtをパースする
+// stmt = expr-stmt
+static Node *stmt(Token **rest, Token *tok) {
+    return expr_stmt(rest, tok);
+}
+
+// expr-stmtをパースする
+// expr-stmt = expr ";"
+static Node *expr_stmt(Token **rest, Token *tok) {
+    Node *node = new_unary(ND_EXPR_STMT, expr(&tok, tok));
+    *rest = skip(tok, ";");
+    return node;
+}
 
 // exprをパースする
 // expr = equality
@@ -168,9 +184,12 @@ static Node *primary(Token **rest, Token *tok) {
     error_tok(tok, "式がもう一つ必要です");
 }
 
+// programは複数のstmtからなる
+// program = stmt*
 Node *parse(Token *tok) {
-    Node *node = expr(&tok, tok);
-    if (tok->kind != TK_EOF)
-        error_tok(tok, "余分なトークンです");
-    return node;
+    Node head = {};
+    Node *cur = &head;
+    while (tok->kind != TK_EOF)
+        cur = cur->next = stmt(&tok, tok);
+    return head.next;
 }

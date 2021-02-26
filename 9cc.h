@@ -40,16 +40,17 @@ Token *tokenize(char *input);
 //
 
 typedef enum {
-    ND_ADD, // +
-    ND_SUB, // -
-    ND_MUL, // *
-    ND_DIV, // /
-    ND_NEG, // 単項演算子の -
-    ND_EQ,  // ==
-    ND_NE,  // !=
-    ND_LT,  // <
-    ND_LE,  // <=
-    ND_NUM, // 整数
+    ND_ADD,       // +
+    ND_SUB,       // -
+    ND_MUL,       // *
+    ND_DIV,       // /
+    ND_NEG,       // 単項演算子の -
+    ND_EQ,        // ==
+    ND_NE,        // !=
+    ND_LT,        // <
+    ND_LE,        // <=
+    ND_EXPR_STMT, // 式文
+    ND_NUM,       // 整数
 } NodeKind;
 
 typedef struct Node Node;
@@ -57,6 +58,7 @@ typedef struct Node Node;
 // 抽象構文木のノードの型
 struct Node {
     NodeKind kind; // ノードの型
+    Node *next;    // 次のstmtのノード
     Node *lhs;     // 左辺
     Node *rhs;     // 右辺
     int val;       // kindがND_NUMの場合のみ使う
