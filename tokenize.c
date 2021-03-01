@@ -84,6 +84,7 @@ Token *tokenize(char *p) {
             continue;
         }
 
+        // 数値リテラル
         if (isdigit(*p)) {
             cur = cur->next = new_token(TK_NUM, p, p);
             char *q = p;
@@ -92,9 +93,17 @@ Token *tokenize(char *p) {
             continue;
         }
 
+        // 識別子
+        if ('a' <= *p && *p <= 'z') {
+            cur = cur->next = new_token(TK_IDENT, p, p + 1);
+            p++;
+            continue;
+        }
+
+        // 記号
         int punct_len = read_punct(p);
         if (punct_len) {
-            cur = cur->next = new_token(TK_RESERVED, p, p + punct_len);
+            cur = cur->next = new_token(TK_PUNCT, p, p + punct_len);
             p += cur->len;
             continue;
         }
