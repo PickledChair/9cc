@@ -94,7 +94,13 @@ void gen_expr(Node *node) {
 }
 
 static void gen_stmt(Node *node) {
-    if (node->kind == ND_EXPR_STMT) {
+    switch (node->kind) {
+    case ND_RETURN:
+        gen_expr(node->lhs);
+        // .L.return ラベルにジャンプする
+        printf("  jmp .L.return\n");
+        return;
+    case ND_EXPR_STMT:
         // expr以下の抽象構文木を下りながらコード生成
         gen_expr(node->lhs);
         return;
@@ -132,6 +138,7 @@ void codegen(Function *prog) {
     }
 
     // エピローグ
+    printf(".L.return:\n");  // return文からの飛び先がここ
     printf("  mov %%rbp, %%rsp\n");
     printf("  pop %%rbp\n");
 

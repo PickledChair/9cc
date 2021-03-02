@@ -80,6 +80,12 @@ static int read_punct(char *p) {
     return ispunct(*p) ? 1 : 0;
 }
 
+static void convert_keywords(Token *tok) {
+    for (Token *t = tok; t->kind != TK_EOF; t = t->next)
+        if (equal(t, "return"))
+            t->kind = TK_KEYWORD;
+}
+
 // 入力文字列pをトークナイズしてそれを返す
 Token *tokenize(char *p) {
     user_input = p;
@@ -103,7 +109,7 @@ Token *tokenize(char *p) {
             continue;
         }
 
-        // 識別子
+        // 識別子あるいはキーワード
         if (is_ident1(*p)) {
             char *start = p;
             do {
@@ -125,5 +131,6 @@ Token *tokenize(char *p) {
     }
 
     cur = cur->next = new_token(TK_EOF, p, p);
+    convert_keywords(head.next);
     return head.next;
 }
