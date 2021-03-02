@@ -12,12 +12,17 @@ static void pop(char *arg) {
     depth--;
 }
 
+// nを最も近いalignの倍数に切り上げる。例えば、
+// align_to(5, 8)は8を返し、align_to(11, 8)は16を返す
+static int align_to(int n, int align) {
+    return (n + align - 1) / align * align;
+}
+
 // 与えられたノードの絶対アドレスを計算する
 // もし与えられたノードがメモリ上に存在しなかったらエラーを出力する
 static void gen_addr(Node *node) {
     if (node->kind == ND_VAR) {
-        int offset = (node->name - 'a' + 1) * 8;
-        printf("  lea %d(%%rbp), %%rax\n", -offset);
+        printf("  lea %d(%%rbp), %%rax\n", node->var->offset);
         return;
     }
 
@@ -98,18 +103,30 @@ static void gen_stmt(Node *node) {
     error("正しくない文です");
 }
 
-void codegen(Node *node) {
-    // アセンブリの前半部分を出力
+// 各ローカル変数のoffsetにオフセットを代入する
+static void assign_lvar_offsets(Function *prog) {
+    int offset = 0;
+    for (Obj *var = prog->locals; var; var = var->next) {
+        offset += 8;
+        var->offset = -offset;
+    }
+    prog->stack_size = align_to(offset, 16);
+}
+
+void codegen(Function *prog) {
+    assign_lvar_offsets(prog);
+
+    // main関数
     printf("  .globl main\n");
     printf("main:\n");
 
     // プロローグ（アルファベット26文字のローカル変数のメモリを予め確保）
     printf("  push %%rbp\n");
     printf("  mov %%rsp, %%rbp\n");
-    printf("  sub $208, %%rsp\n");  // 26文字 * 8 bit 分空けておく
+    printf("  sub $%d, %%rsp\n", prog->stack_size);  // 関数フレームの確保
 
     // stmtノードを順番に辿ってコード生成
-    for (Node *n = node; n; n = n->next) {
+    for (Node *n = prog->body; n; n = n->next) {
         gen_stmt(n);
         assert(depth == 0);
     }

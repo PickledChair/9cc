@@ -10,8 +10,9 @@ int main(int argc, char **argv) {
     Token *tok = tokenize(argv[1]);
 
     // パースする
-    Node *node = parse(tok);
+    Function *prog = parse(tok);
 
-    codegen(node);
+    // ASTを走査してアセンブリを出力する
+    codegen(prog);
     return 0;
 }

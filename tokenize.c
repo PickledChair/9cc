@@ -49,7 +49,7 @@ Token *skip(Token *tok, char *op) {
 }
 
 // 新しいトークンを作成してcurに繋げる
-Token *new_token(TokenKind kind, char *start, char *end) {
+static Token *new_token(TokenKind kind, char *start, char *end) {
     Token *tok = calloc(1, sizeof(Token));
     tok->kind = kind;
     tok->loc = start;
@@ -58,11 +58,21 @@ Token *new_token(TokenKind kind, char *start, char *end) {
 }
 
 // 入力文字列の先頭が指定した文字列から始まっているかどうかを返す
-bool startswith(char *p, char *q) {
+static bool startswith(char *p, char *q) {
     return memcmp(p, q, strlen(q)) == 0;
 }
 
-int read_punct(char *p) {
+// cが識別子の最初の文字として適当ならtrueを返す
+static bool is_ident1(char c) {
+    return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || c == '_';
+}
+
+// cが識別子の２文字目以降の文字として適当ならtrueを返す
+static bool is_ident2(char c) {
+    return is_ident1(c) || ('0' <= c && c <= '9');
+}
+
+static int read_punct(char *p) {
     if (startswith(p, "==") || startswith(p, "!=") ||
         startswith(p, "<=") || startswith(p, ">="))
         return 2;
@@ -94,9 +104,12 @@ Token *tokenize(char *p) {
         }
 
         // 識別子
-        if ('a' <= *p && *p <= 'z') {
-            cur = cur->next = new_token(TK_IDENT, p, p + 1);
-            p++;
+        if (is_ident1(*p)) {
+            char *start = p;
+            do {
+                p++;
+            } while (is_ident2(*p));
+            cur = cur->next = new_token(TK_IDENT, start, p);
             continue;
         }
 
