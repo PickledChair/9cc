@@ -126,7 +126,7 @@ void codegen(Function *prog) {
     printf("  .globl main\n");
     printf("main:\n");
 
-    // プロローグ（アルファベット26文字のローカル変数のメモリを予め確保）
+    // プロローグ
     printf("  push %%rbp\n");
     printf("  mov %%rsp, %%rbp\n");
     printf("  sub $%d, %%rsp\n", prog->stack_size);  // 関数フレームの確保
