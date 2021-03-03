@@ -31,7 +31,7 @@ static void gen_addr(Node *node) {
         return;
     }
 
-    error("左辺値ではありません");
+    error_tok(node->tok, "左辺値ではありません");
 }
 
 // 抽象構文木にしたがって再帰的にアセンブリを出力する
@@ -95,7 +95,7 @@ void gen_expr(Node *node) {
             return;
     }
 
-    error("正しくない式です");
+    error_tok(node->tok, "正しくない式です");
 }
 
 static void gen_stmt(Node *node) {
@@ -146,7 +146,7 @@ static void gen_stmt(Node *node) {
         return;
     }
 
-    error("正しくない文です");
+    error_tok(node->tok, "正しくない文です");
 }
 
 // 各ローカル変数のoffsetにオフセットを代入する
