@@ -72,12 +72,31 @@ static Node *primary(Token **rest, Token *tok);
 // stmtをパースする
 // stmt = "return" expr ";"
 //      | "if" "(" expr ")" stmt ("else" stmt)?
+//      | "for" "(" expr-stmt expr? ";" expr? ")" stmt
 //      | "{" compund-stmt
 //      | expr-stmt
 static Node *stmt(Token **rest, Token *tok) {
     if (equal(tok, "return")) {
         Node *node = new_unary(ND_RETURN, expr(&tok, tok->next));
         *rest = skip(tok, ";");
+        return node;
+    }
+
+    if (equal(tok, "for")) {
+        Node *node = new_node(ND_FOR);
+        tok = skip(tok->next, "(");
+
+        node->init = expr_stmt(&tok, tok);
+
+        if (!equal(tok, ";"))
+            node->cond = expr(&tok, tok);
+        tok = skip(tok, ";");
+
+        if (!equal(tok, ")"))
+            node->inc = expr(&tok, tok);
+        tok = skip(tok, ")");
+
+        node->then = stmt(rest, tok);
         return node;
     }
 
