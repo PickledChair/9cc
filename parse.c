@@ -137,8 +137,10 @@ static Node *compound_stmt(Token **rest, Token *tok) {
 
     Node head = {};
     Node *cur = &head;
-    while (!equal(tok, "}"))
+    while (!equal(tok, "}")) {
         cur = cur->next = stmt(&tok, tok);
+        add_type(cur);
+    }
 
     node->body = head.next;
     *rest = tok->next;
@@ -233,6 +235,65 @@ static Node *relational(Token **rest, Token *tok) {
     }
 }
 
+// C言語では、+演算子はポインタ演算を実現するためにオーバーロードされている。
+// pがポインタであるとき、p+nはpにnを足すという意味にはならない。
+// pにsizeof(*p)*nを足す、という意味になる。
+// したがってp+nが指し示すのはpよりも前方に「n要素」進んだ場所である。
+// （「nバイト」進んだ場所ではない。）
+// このため、ポインタ値へ整数値を足すときは、前もって整数値をスケールしておく
+// 必要がある。この関数はこのスケーリングを担当する。
+static Node *new_add(Node *lhs, Node *rhs, Token *tok) {
+    add_type(lhs);
+    add_type(rhs);
+
+    // 数値 + 数値
+    if (is_integer(lhs->ty) && is_integer(rhs->ty))
+        return new_binary(ND_ADD, lhs, rhs, tok);
+
+    // ポインタどうしの加算は禁止   
+    if (lhs->ty->base && rhs->ty->base)
+        error_tok(tok, "正しくないオペランドです");
+    
+    // 「num + ptr」は「ptr + num」に正規化する
+    if (!lhs->ty->base && rhs->ty->base) {
+        Node *tmp = lhs;
+        lhs = rhs;
+        rhs = tmp;
+    }
+
+    // ptr + num
+    rhs = new_binary(ND_MUL, rhs, new_num(8, tok), tok);  // スケーリング
+    return new_binary(ND_ADD, lhs, rhs, tok);
+}
+
+// +演算子のように、-演算子もポインタ型のためにオーバーロードする
+static Node *new_sub(Node *lhs, Node *rhs, Token *tok) {
+    add_type(lhs);
+    add_type(rhs);
+
+    // num - num
+    if (is_integer(lhs->ty) && is_integer(rhs->ty))
+        return new_binary(ND_SUB, lhs, rhs, tok);
+    
+    // ptr - num
+    if (lhs->ty->base && is_integer(rhs->ty)) {
+        rhs = new_binary(ND_MUL, rhs, new_num(8, tok), tok);
+        add_type(rhs);
+        Node *node = new_binary(ND_SUB, lhs, rhs, tok);
+        node->ty = lhs->ty;
+        return node;
+    }
+
+    // ptr - ptr（２つの要素間に何個の要素があるかを返す）
+    if (lhs->ty->base && rhs->ty->base) {
+        Node *node = new_binary(ND_SUB, lhs, rhs, tok);
+        node->ty = ty_int;
+        return new_binary(ND_DIV, node, new_num(8, tok), tok);
+    }
+
+    error_tok(tok, "正しくないオペランドです");
+}
+
 // addをパースする
 // add = mul ("+" mul | "-" mul)*
 static Node *add(Token **rest, Token *tok) {
@@ -242,12 +303,12 @@ static Node *add(Token **rest, Token *tok) {
         Token *start = tok;
 
         if (equal(tok, "+")) {
-            node = new_binary(ND_ADD, node, mul(&tok, tok->next), start);
+            node = new_add(node, mul(&tok, tok->next), start);
             continue;
         }
 
         if (equal(tok, "-")) {
-            node = new_binary(ND_SUB, node, mul(&tok, tok->next), start);
+            node = new_sub(node, mul(&tok, tok->next), start);
             continue;
         }
 
