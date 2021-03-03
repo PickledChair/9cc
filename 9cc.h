@@ -72,6 +72,7 @@ typedef enum {
     ND_LE,        // <=
     ND_ASSIGN,    // =
     ND_RETURN,    // "return"
+    ND_IF,        // "if"
     ND_BLOCK,     // { ... }
     ND_EXPR_STMT, // 式文
     ND_VAR,       // 変数
@@ -82,8 +83,14 @@ typedef enum {
 struct Node {
     NodeKind kind; // ノードの型
     Node *next;    // 次のstmtのノード
+
     Node *lhs;     // 左辺
     Node *rhs;     // 右辺
+
+    // "if" 文
+    Node *cond;
+    Node *then;
+    Node *els;
 
     // Block
     Node *body;
