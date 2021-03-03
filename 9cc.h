@@ -72,6 +72,7 @@ typedef enum {
     ND_LE,        // <=
     ND_ASSIGN,    // =
     ND_RETURN,    // "return"
+    ND_BLOCK,     // { ... }
     ND_EXPR_STMT, // 式文
     ND_VAR,       // 変数
     ND_NUM,       // 整数
@@ -83,6 +84,10 @@ struct Node {
     Node *next;    // 次のstmtのノード
     Node *lhs;     // 左辺
     Node *rhs;     // 右辺
+
+    // Block
+    Node *body;
+
     Obj *var;      // kindがND_VARの場合のみ使う
     int val;       // kindがND_NUMの場合のみ使う
 };

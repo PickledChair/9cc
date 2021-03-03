@@ -44,7 +44,7 @@ bool equal(Token *tok, char *op) {
 // それ以外の場合にはエラーを報告する。
 Token *skip(Token *tok, char *op) {
     if (!equal(tok, op))
-        error_tok(tok, "演算子 '%s' が必要です", op);
+        error_tok(tok, "記号 '%s' が必要です", op);
     return tok->next;
 }
 

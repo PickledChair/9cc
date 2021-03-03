@@ -95,6 +95,11 @@ void gen_expr(Node *node) {
 
 static void gen_stmt(Node *node) {
     switch (node->kind) {
+    case ND_BLOCK:
+        // stmtノードを順番に辿ってコード生成
+        for (Node *n = node->body; n; n = n->next)
+            gen_stmt(n);
+        return;
     case ND_RETURN:
         gen_expr(node->lhs);
         // .L.return ラベルにジャンプする
@@ -131,11 +136,9 @@ void codegen(Function *prog) {
     printf("  mov %%rsp, %%rbp\n");
     printf("  sub $%d, %%rsp\n", prog->stack_size);  // 関数フレームの確保
 
-    // stmtノードを順番に辿ってコード生成
-    for (Node *n = prog->body; n; n = n->next) {
-        gen_stmt(n);
-        assert(depth == 0);
-    }
+    // コード生成
+    gen_stmt(prog->body);
+    assert(depth == 0);
 
     // エピローグ
     printf(".L.return:\n");  // return文からの飛び先がここ
