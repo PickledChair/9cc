@@ -50,16 +50,25 @@ static Node *new_var_node(Obj *var, Token *tok) {
 }
 
 // 新しいローカル変数を作成する
-static Obj *new_lvar(char *name) {
+static Obj *new_lvar(char *name, Type *ty) {
     Obj *var = calloc(1, sizeof(Obj));
     var->name = name;
+    var->ty = ty;
     var->next = locals;
     locals = var;
     return var;
 }
 
+// 識別子のトークンから識別子の文字列を得る
+static char *get_ident(Token *tok) {
+    if (tok->kind != TK_IDENT)
+        error_tok(tok, "トークンの種類が識別子である必要があります");
+    return strndup(tok->loc, tok->len);
+}
+
 static Node *stmt(Token **rest, Token *tok);
 static Node *compound_stmt(Token **rest, Token *tok);
+static Node *declaration(Token **rest, Token *tok);
 static Node *expr_stmt(Token **rest, Token *tok);
 static Node *assign(Token **rest, Token *tok);
 static Node *expr(Token **rest, Token *tok);
@@ -131,17 +140,72 @@ static Node *stmt(Token **rest, Token *tok) {
 }
 
 // compound-stmtをパースする
-// compound-stmt = stmt* "}"
+// compound-stmt = (declaration | stmt)* "}"
 static Node *compound_stmt(Token **rest, Token *tok) {
     Node *node = new_node(ND_BLOCK, tok);
 
     Node head = {};
     Node *cur = &head;
     while (!equal(tok, "}")) {
-        cur = cur->next = stmt(&tok, tok);
+        if (equal(tok, "int"))
+            cur = cur->next = declaration(&tok, tok);
+        else
+            cur = cur->next = stmt(&tok, tok);
         add_type(cur);
     }
 
+    node->body = head.next;
+    *rest = tok->next;
+    return node;
+}
+
+// declspecをパースする
+// declspec = "int"
+static Type *declspec(Token **rest, Token *tok) {
+    *rest = skip(tok, "int");
+    return ty_int;
+}
+
+// declaratorをパースする
+// declarator = "*"* ident
+static Type *declarator(Token **rest, Token *tok, Type *ty) {
+    while (consume(&tok, tok, "*"))
+        ty = pointer_to(ty);
+    
+    if (tok->kind != TK_IDENT)
+        error_tok(tok, "変数名がありません");
+    
+    ty->name = tok;
+    *rest = tok->next;
+    return ty;
+}
+
+// declarationをパースする
+// declaration = declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*)? ";"
+static Node *declaration(Token **rest, Token *tok) {
+    Type *basety = declspec(&tok, tok);
+
+    Node head = {};
+    Node *cur = &head;
+    int i = 0;
+
+    while(!equal(tok, ";")) {
+        if (i++ > 0)
+            tok = skip(tok, ",");
+        
+        Type *ty = declarator(&tok, tok, basety);
+        Obj *var = new_lvar(get_ident(ty->name), ty);
+
+        if (!equal(tok, "="))
+            continue;
+        
+        Node *lhs = new_var_node(var, ty->name);
+        Node *rhs = assign(&tok, tok->next);
+        Node *node = new_binary(ND_ASSIGN, lhs, rhs, tok);
+        cur = cur->next = new_unary(ND_EXPR_STMT, node, tok);
+    }
+
+    Node *node = new_node(ND_BLOCK, tok);
     node->body = head.next;
     *rest = tok->next;
     return node;
@@ -368,7 +432,7 @@ static Node *primary(Token **rest, Token *tok) {
     if (tok->kind == TK_IDENT) {
         Obj *var = find_var(tok);
         if (!var)
-            var = new_lvar(strndup(tok->loc, tok->len));
+            error_tok(tok, "未定義な変数です");
         *rest = tok->next;
         return new_var_node(var, tok);
     }

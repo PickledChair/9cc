@@ -39,6 +39,7 @@ void error_at(char *loc, char *fmt, ...);
 void error_tok(Token *tok, char *fmt, ...);
 bool equal(Token *tok, char *op);
 Token *skip(Token *tok, char *op);
+bool consume(Token **rest, Token *tok, char *str);
 Token *tokenize(char *input);
 
 //
@@ -50,6 +51,7 @@ typedef struct Obj Obj;
 struct Obj {
     Obj *next;
     char *name;   // 変数名
+    Type *ty;     // 型
     int offset;   // RBPレジスタからのオフセット
 };
 
@@ -120,12 +122,18 @@ typedef enum {
 
 struct Type {
     TypeKind kind;
+
+    // ポインタ
     Type *base;
+
+    // 宣言
+    Token *name;
 };
 
 extern Type *ty_int;
 
 bool is_integer(Type *ty);
+Type *pointer_to(Type *base);
 void add_type(Node *node);
 
 //
