@@ -52,7 +52,7 @@ void add_type(Node *node) {
         return;
     case ND_DEREF:
         if (node->lhs->ty->kind != TY_PTR)
-            error_tok(node->tok, "ポインタに対する不正な参照外しです");
+            error_tok(node->tok, "不正な参照外しです");
         node->ty = node->lhs->ty->base;
         return;
     }
