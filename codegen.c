@@ -2,6 +2,7 @@
 
 static int depth;
 static char *argreg[] = {"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"};
+static Function *current_fn;
 
 static void gen_expr(Node *node);
 
@@ -42,7 +43,7 @@ static void gen_addr(Node *node) {
 }
 
 // 抽象構文木にしたがって再帰的にアセンブリを出力する
-void gen_expr(Node *node) {
+static void gen_expr(Node *node) {
     switch(node->kind) {
     case ND_NUM:
         printf("  mov $%d, %%rax\n", node->val);
@@ -167,7 +168,7 @@ static void gen_stmt(Node *node) {
     case ND_RETURN:
         gen_expr(node->lhs);
         // .L.return ラベルにジャンプする
-        printf("  jmp .L.return\n");
+        printf("  jmp .L.return.%s\n", current_fn->name);
         return;
     case ND_EXPR_STMT:
         // expr以下の抽象構文木を下りながらコード生成
@@ -180,36 +181,40 @@ static void gen_stmt(Node *node) {
 
 // 各ローカル変数のoffsetにオフセットを代入する
 static void assign_lvar_offsets(Function *prog) {
-    int offset = 0;
-    for (Obj *var = prog->locals; var; var = var->next) {
-        offset += 8;
-        var->offset = -offset;
+    for (Function *fn = prog; fn; fn = fn->next) {
+        int offset = 0;
+        for (Obj *var = fn->locals; var; var = var->next) {
+            offset += 8;
+            var->offset = -offset;
+        }
+        fn->stack_size = align_to(offset, 16);
     }
-    prog->stack_size = align_to(offset, 16);
 }
 
 void codegen(Function *prog) {
     assign_lvar_offsets(prog);
 
-    // main関数
-    printf("  .globl main\n");
-    printf("main:\n");
+    for (Function *fn = prog; fn; fn = fn->next) {
+        printf("  .globl %s\n", fn->name);
+        printf("%s:\n", fn->name);
+        current_fn = fn;
 
-    // プロローグ
-    printf("  push %%rbp\n");
-    printf("  mov %%rsp, %%rbp\n");
-    printf("  sub $%d, %%rsp\n", prog->stack_size);  // 関数フレームの確保
+        // プロローグ
+        printf("  push %%rbp\n");
+        printf("  mov %%rsp, %%rbp\n");
+        printf("  sub $%d, %%rsp\n", fn->stack_size);  // 関数フレームの確保
 
-    // コード生成
-    gen_stmt(prog->body);
-    assert(depth == 0);
+        // コード生成
+        gen_stmt(fn->body);
+        assert(depth == 0);
 
-    // エピローグ
-    printf(".L.return:\n");  // return文からの飛び先がここ
-    printf("  mov %%rbp, %%rsp\n");
-    printf("  pop %%rbp\n");
+        // エピローグ
+        printf(".L.return.%s:\n", fn->name);  // return文からの飛び先がここ
+        printf("  mov %%rbp, %%rsp\n");
+        printf("  pop %%rbp\n");
 
-    // RAX に式を計算した結果が残っているので、
-    // それをそのまま返す
-    printf("  ret\n");
+        // RAX に式を計算した結果が残っているので、
+        // それをそのまま返す
+        printf("  ret\n");
+    }
 }

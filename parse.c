@@ -68,6 +68,8 @@ static char *get_ident(Token *tok) {
 
 static Node *stmt(Token **rest, Token *tok);
 static Node *compound_stmt(Token **rest, Token *tok);
+static Type *declspec(Token **rest, Token *tok);
+static Type *declarator(Token **rest, Token *tok, Type* ty);
 static Node *declaration(Token **rest, Token *tok);
 static Node *expr_stmt(Token **rest, Token *tok);
 static Node *assign(Token **rest, Token *tok);
@@ -166,8 +168,19 @@ static Type *declspec(Token **rest, Token *tok) {
     return ty_int;
 }
 
+// type-suffixをパースする
+// type-suffix = ("(" func-params)?
+static Type *type_suffix(Token **rest, Token *tok, Type *ty) {
+    if (equal(tok, "(")) {
+        *rest = skip(tok->next, ")");
+        return func_type(ty);
+    }
+    *rest = tok;
+    return ty;
+}
+
 // declaratorをパースする
-// declarator = "*"* ident
+// declarator = "*"* ident type-suffix
 static Type *declarator(Token **rest, Token *tok, Type *ty) {
     while (consume(&tok, tok, "*"))
         ty = pointer_to(ty);
@@ -175,8 +188,8 @@ static Type *declarator(Token **rest, Token *tok, Type *ty) {
     if (tok->kind != TK_IDENT)
         error_tok(tok, "変数名がありません");
     
+    ty = type_suffix(rest, tok->next, ty);
     ty->name = tok;
-    *rest = tok->next;
     return ty;
 }
 
@@ -476,13 +489,30 @@ static Node *primary(Token **rest, Token *tok) {
     error_tok(tok, "式が必要です");
 }
 
-// programは複数のstmtからなる
-// program = stmt*
-Function *parse(Token *tok) {
+// function-definitionをパースする
+// function-definition = declspec declarator compound_stmt
+static Function *function(Token **rest, Token *tok) {
+    Type *ty = declspec(&tok, tok);
+    ty = declarator(&tok, tok, ty);
+
+    locals = NULL;
+
+    Function *fn = calloc(1, sizeof(Function));
+    fn->name = get_ident(ty->name);
+
     tok = skip(tok, "{");
-    
-    Function *prog = calloc(1, sizeof(Function));
-    prog->body = compound_stmt(&tok, tok);
-    prog->locals = locals;
-    return prog;
+    fn->body = compound_stmt(rest, tok);
+    fn->locals = locals;
+    return fn;
+}
+
+// programは複数のfunction-definitionからなる
+// program = function-definition*
+Function *parse(Token *tok) {
+    Function head = {};
+    Function *cur = &head;
+
+    while (tok->kind != TK_EOF)
+        cur = cur->next = function(&tok, tok);
+    return head.next;
 }

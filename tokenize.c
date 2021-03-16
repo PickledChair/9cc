@@ -109,7 +109,6 @@ static void convert_keywords(Token *tok) {
 Token *tokenize(char *p) {
     user_input = p;
     Token head = {};
-    head.next = NULL;
     Token *cur = &head;
 
     while (*p) {
@@ -123,7 +122,7 @@ Token *tokenize(char *p) {
         if (isdigit(*p)) {
             cur = cur->next = new_token(TK_NUM, p, p);
             char *q = p;
-            cur->val = strtol(p, &p, 10);
+            cur->val = strtoul(p, &p, 10);
             cur->len = p - q;
             continue;
         }
