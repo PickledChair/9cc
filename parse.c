@@ -169,12 +169,30 @@ static Type *declspec(Token **rest, Token *tok) {
 }
 
 // type-suffixをパースする
-// type-suffix = ("(" func-params)?
+// type-suffix = ("(" func-params? ")")?
+// func-params = param ("," param)*
+// param       = declspec declarator
 static Type *type_suffix(Token **rest, Token *tok, Type *ty) {
     if (equal(tok, "(")) {
-        *rest = skip(tok->next, ")");
-        return func_type(ty);
+        tok = tok->next;
+
+        Type head = {};
+        Type *cur = &head;
+
+        while (!equal(tok, ")")) {
+            if (cur != &head)
+                tok = skip(tok, ",");
+            Type *basety = declspec(&tok, tok);
+            Type *ty = declarator(&tok, tok, basety);
+            cur = cur->next = copy_type(ty);
+        }
+
+        ty = func_type(ty);
+        ty->params = head.next;
+        *rest = tok->next;
+        return ty;
     }
+
     *rest = tok;
     return ty;
 }
@@ -184,10 +202,10 @@ static Type *type_suffix(Token **rest, Token *tok, Type *ty) {
 static Type *declarator(Token **rest, Token *tok, Type *ty) {
     while (consume(&tok, tok, "*"))
         ty = pointer_to(ty);
-    
+
     if (tok->kind != TK_IDENT)
         error_tok(tok, "変数名がありません");
-    
+
     ty = type_suffix(rest, tok->next, ty);
     ty->name = tok;
     return ty;
@@ -205,13 +223,13 @@ static Node *declaration(Token **rest, Token *tok) {
     while(!equal(tok, ";")) {
         if (i++ > 0)
             tok = skip(tok, ",");
-        
+
         Type *ty = declarator(&tok, tok, basety);
         Obj *var = new_lvar(get_ident(ty->name), ty);
 
         if (!equal(tok, "="))
             continue;
-        
+
         Node *lhs = new_var_node(var, ty->name);
         Node *rhs = assign(&tok, tok->next);
         Node *node = new_binary(ND_ASSIGN, lhs, rhs, tok);
@@ -327,10 +345,10 @@ static Node *new_add(Node *lhs, Node *rhs, Token *tok) {
     if (is_integer(lhs->ty) && is_integer(rhs->ty))
         return new_binary(ND_ADD, lhs, rhs, tok);
 
-    // ポインタどうしの加算は禁止   
+    // ポインタどうしの加算は禁止
     if (lhs->ty->base && rhs->ty->base)
         error_tok(tok, "正しくないオペランドです");
-    
+
     // 「num + ptr」は「ptr + num」に正規化する
     if (!lhs->ty->base && rhs->ty->base) {
         Node *tmp = lhs;
@@ -351,7 +369,7 @@ static Node *new_sub(Node *lhs, Node *rhs, Token *tok) {
     // num - num
     if (is_integer(lhs->ty) && is_integer(rhs->ty))
         return new_binary(ND_SUB, lhs, rhs, tok);
-    
+
     // ptr - num
     if (lhs->ty->base && is_integer(rhs->ty)) {
         rhs = new_binary(ND_MUL, rhs, new_num(8, tok), tok);
@@ -489,6 +507,13 @@ static Node *primary(Token **rest, Token *tok) {
     error_tok(tok, "式が必要です");
 }
 
+static void create_param_lvars(Type *param) {
+    if (param) {
+        create_param_lvars(param->next);
+        new_lvar(get_ident(param->name), param);
+    }
+}
+
 // function-definitionをパースする
 // function-definition = declspec declarator compound_stmt
 static Function *function(Token **rest, Token *tok) {
@@ -499,6 +524,8 @@ static Function *function(Token **rest, Token *tok) {
 
     Function *fn = calloc(1, sizeof(Function));
     fn->name = get_ident(ty->name);
+    create_param_lvars(ty->params);
+    fn->params = locals;
 
     tok = skip(tok, "{");
     fn->body = compound_stmt(rest, tok);

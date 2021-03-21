@@ -6,6 +6,12 @@ bool is_integer(Type *ty) {
     return ty->kind == TY_INT;
 }
 
+Type *copy_type(Type *ty) {
+    Type *ret = calloc(1, sizeof(Type));
+    *ret = *ty;
+    return ret;
+}
+
 Type *pointer_to(Type *base) {
     Type *ty = calloc(1, sizeof(Type));
     ty->kind = TY_PTR;
@@ -23,7 +29,7 @@ Type *func_type(Type *return_ty) {
 void add_type(Node *node) {
     if (!node || node->ty)
         return;
-    
+
     add_type(node->lhs);
     add_type(node->rhs);
     add_type(node->cond);
@@ -34,7 +40,9 @@ void add_type(Node *node) {
 
     for (Node *n = node->body; n; n = n->next)
         add_type(n);
-    
+    for (Node *n = node->args; n; n = n->next)
+        add_type(n);
+
     switch (node->kind) {
     case ND_ADD:
     case ND_SUB:
