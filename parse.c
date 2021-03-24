@@ -510,13 +510,19 @@ static Node *funcall(Token **rest, Token *tok) {
 }
 
 // primaryをパースする
-// primary = "(" expr ")" | ident func-args? | num
+// primary = "(" expr ")" | "sizeof" unary | ident func-args? | num
 static Node *primary(Token **rest, Token *tok) {
     // 次のトークンが"("なら、"(" expr ")"のはず
     if (equal(tok, "(")) {
         Node *node = expr(&tok, tok->next);
         *rest = skip(tok, ")");
         return node;
+    }
+
+    if (equal(tok, "sizeof")) {
+        Node *node = unary(rest, tok->next);
+        add_type(node);
+        return new_num(node->ty->size, tok);
     }
 
     // 次に考えられるのは識別子
