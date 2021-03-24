@@ -128,16 +128,29 @@ typedef enum {
     TY_INT,
     TY_PTR,
     TY_FUNC,
+    TY_ARRAY
 } TypeKind;
 
 struct Type {
     TypeKind kind;
 
-    // ポインタ
+    int size;    // sizeof() value
+
+    // pointer-to 型、または array-of 型。C においてはポインタと配列は意味的に
+    // 重複しているため、意図的に同じメンバ変数を用いている。
+
+    // ポインタが期待されているような文脈の多くで、ある型がポインタなのかそうで
+    // ないのかを判別するために、このメンバを "kind" メンバの代わりに調べる。
+    // これは、多くの文脈における "array of T" を、C の仕様で要求されている
+    // ように、あたかも "pointer to T" であるかのように自然に扱う、ということを
+    // 意味する。
     Type *base;
 
     // 宣言
     Token *name;
+
+    // 配列
+    int array_len;
 
     // 関数の型
     Type *return_ty;
@@ -151,6 +164,7 @@ bool is_integer(Type *ty);
 Type *copy_type(Type *ty);
 Type *pointer_to(Type *base);
 Type *func_type(Type* return_ty);
+Type *array_of(Type* base, int len);
 void add_type(Node *node);
 
 //

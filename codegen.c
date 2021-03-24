@@ -42,6 +42,27 @@ static void gen_addr(Node *node) {
     error_tok(node->tok, "左辺値ではありません");
 }
 
+// %raxレジスタの値が指し示しているアドレスから%raxレジスタに値をロードする
+static void load(Type *ty) {
+    if (ty->kind == TY_ARRAY) {
+        // もしそれが配列なら、レジスタに値をロードしようとはしないように。
+        // なぜなら、一般的に配列全体を一つのレジスタにロードすることはでき
+        // ないからである。結果として、配列を評価した結果は配列そのものでは
+        // なく、その配列のアドレスになる。ここでは、「Cにおいて、配列はその
+        // 配列の先頭要素へのポインタへと自動的に変換される」ということが起こ
+        // っている。
+        return;
+    }
+
+    printf("  mov (%%rax), %%rax\n");
+}
+
+// スタックトップの値が指し示しているアドレスに%raxレジスタの値をストアする
+static void store(void) {
+    pop("%rdi");
+    printf("  mov %%rax, (%%rdi)\n");
+}
+
 // 抽象構文木にしたがって再帰的にアセンブリを出力する
 static void gen_expr(Node *node) {
     switch(node->kind) {
@@ -54,11 +75,11 @@ static void gen_expr(Node *node) {
         return;
     case ND_VAR:
         gen_addr(node);
-        printf("  mov (%%rax), %%rax\n");
+        load(node->ty);
         return;
     case ND_DEREF:
         gen_expr(node->lhs);
-        printf("  mov (%%rax), %%rax\n");
+        load(node->ty);
         return;
     case ND_ADDR:
         gen_addr(node->lhs);
@@ -67,8 +88,7 @@ static void gen_expr(Node *node) {
         gen_addr(node->lhs);
         push();
         gen_expr(node->rhs);
-        pop("%rdi");
-        printf("  mov %%rax, (%%rdi)\n");
+        store();
         return;
     case ND_FUNCALL: {
         int nargs = 0;
@@ -184,7 +204,7 @@ static void assign_lvar_offsets(Function *prog) {
     for (Function *fn = prog; fn; fn = fn->next) {
         int offset = 0;
         for (Obj *var = fn->locals; var; var = var->next) {
-            offset += 8;
+            offset += var->ty->size;
             var->offset = -offset;
         }
         fn->stack_size = align_to(offset, 16);
