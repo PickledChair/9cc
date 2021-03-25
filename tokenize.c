@@ -101,15 +101,61 @@ static bool is_keyword(Token *tok) {
     return false;
 }
 
-static Token *read_string_literal(char *start) {
-    char *p = start + 1;
-    for (; *p != '"'; p++)
+static int read_escaped_char(char *p) {
+    // エスケープシーケンスはそれら自身を用いて定義する。例えば、'\n'は'\n'を
+    // 用いて定義する。このトートロジー的な定義は、我々のコンパイラをコンパイル
+    // するコンパイラが'\n'とは実際には何かを知っているからこそ機能する。つまり
+    // 我々は、我々のコンパイラをコンパイルするコンパイラから、ASCIIコード'\n'
+    // を「受け継いでいる」のである。
+    //
+    // この事実はコンパイラの正しさのみならず、出力されるコードのセキュリティ
+    // にまで大きな影響を与える。これについてもっと知りたい場合は、ケン・トンプ
+    // ソンによる "Reflections on Trusting Trust"（「信用を信用することができる
+    // だろうか」）を読まれたし。
+    // https://github.com/rui314/chibicc/wiki/thompson1984.pdf
+    switch (*p) {
+    case 'a': return '\a';
+    case 'b': return '\b';
+    case 't': return '\t';
+    case 'n': return '\n';
+    case 'v': return '\v';
+    case 'f': return '\f';
+    case 'r': return '\r';
+    // [GNU] ASCIIの Esc 文字のために \e があるのは GNU C extension の一つである
+    case 'e': return 27;
+    default: return *p;
+    }
+}
+
+// 閉じる側のダブルクォートを探す
+static char *string_literal_end(char *p) {
+    char *start = p;
+    for (; *p != '"'; p++) {
         if (*p == '\n' || *p == '\0')
             error_at(start, "文字列リテラルが閉じられていません");
+        if (*p == '\\')
+            p++;
+    }
+    return p;
+}
 
-    Token *tok = new_token(TK_STR, start, p + 1);
-    tok->ty = array_of(ty_char, p - start);
-    tok->str = strndup(start + 1, p - start - 1);
+static Token *read_string_literal(char *start) {
+    char *end = string_literal_end(start + 1);
+    char *buf = calloc(1, end - start);
+    int len = 0;
+
+    for (char *p = start + 1; p < end;) {
+        if (*p == '\\') {
+            buf[len++] = read_escaped_char(p + 1);
+            p += 2;
+        } else {
+            buf[len++] = *p++;
+        }
+    }
+
+    Token *tok = new_token(TK_STR, start, end + 1);
+    tok->ty = array_of(ty_char, len + 1);
+    tok->str = buf;
     return tok;
 }
 
