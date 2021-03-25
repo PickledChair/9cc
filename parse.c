@@ -111,6 +111,11 @@ static Node *postfix(Token **rest, Token *tok);
 static Node *unary(Token **rest, Token *tok);
 static Node *primary(Token **rest, Token *tok);
 
+// 与えられたトークンが型を表している場合、trueを返す
+static bool is_typename(Token *tok) {
+    return equal(tok, "char") || equal(tok, "int");
+}
+
 // stmtをパースする
 // stmt = "return" expr ";"
 //      | "if" "(" expr ")" stmt ("else" stmt)?
@@ -179,7 +184,7 @@ static Node *compound_stmt(Token **rest, Token *tok) {
     Node head = {};
     Node *cur = &head;
     while (!equal(tok, "}")) {
-        if (equal(tok, "int"))
+        if (is_typename(tok))
             cur = cur->next = declaration(&tok, tok);
         else
             cur = cur->next = stmt(&tok, tok);
@@ -194,6 +199,11 @@ static Node *compound_stmt(Token **rest, Token *tok) {
 // declspecをパースする
 // declspec = "int"
 static Type *declspec(Token **rest, Token *tok) {
+    if (equal(tok, "char")) {
+        *rest = tok->next;
+        return ty_char;
+    }
+
     *rest = skip(tok, "int");
     return ty_int;
 }
@@ -624,7 +634,7 @@ static bool is_function(Token *tok) {
     return ty->kind == TY_FUNC;
 }
 
-// programは複数のfunction-definitionからなる
+// programをパースする
 // program = (function-definition | global-variable)*
 Obj *parse(Token *tok) {
     globals = NULL;
