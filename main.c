@@ -1,4 +1,4 @@
-#include "9cc.h"
+#include "chibicc.h"
 
 int main(int argc, char **argv) {
     if (argc != 2) {

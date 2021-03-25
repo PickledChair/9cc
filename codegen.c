@@ -1,4 +1,4 @@
-#include "9cc.h"
+#include "chibicc.h"
 
 static int depth;
 static char *argreg[] = {"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"};

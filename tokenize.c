@@ -1,4 +1,4 @@
-#include "9cc.h"
+#include "chibicc.h"
 
 // 入力プログラム
 static char *user_input;
