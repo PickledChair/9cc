@@ -101,7 +101,21 @@ static bool is_keyword(Token *tok) {
     return false;
 }
 
-static int read_escaped_char(char *p) {
+static int read_escaped_char(char **new_pos, char *p) {
+    if ('0' <= *p && *p <= '7') {
+        // ８進数を読む
+        int c = *p++ - '0';
+        if ('0' <= *p && *p <= '7') {
+            c = (c << 3) + (*p++ - '0');
+            if ('0' <= *p && *p <= '7')
+                c = (c << 3) + (*p++ - '0');
+        }
+        *new_pos = p;
+        return c;
+    }
+
+    *new_pos = p + 1;
+
     // エスケープシーケンスはそれら自身を用いて定義する。例えば、'\n'は'\n'を
     // 用いて定義する。このトートロジー的な定義は、我々のコンパイラをコンパイル
     // するコンパイラが'\n'とは実際には何かを知っているからこそ機能する。つまり
@@ -145,12 +159,10 @@ static Token *read_string_literal(char *start) {
     int len = 0;
 
     for (char *p = start + 1; p < end;) {
-        if (*p == '\\') {
-            buf[len++] = read_escaped_char(p + 1);
-            p += 2;
-        } else {
+        if (*p == '\\')
+            buf[len++] = read_escaped_char(&p, p + 1);
+        else
             buf[len++] = *p++;
-        }
     }
 
     Token *tok = new_token(TK_STR, start, end + 1);
