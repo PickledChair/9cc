@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
     Token *tok = tokenize(argv[1]);
 
     // パースする
-    Function *prog = parse(tok);
+    Obj *prog = parse(tok);
 
     // ASTを走査してアセンブリを出力する
     codegen(prog);

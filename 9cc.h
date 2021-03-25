@@ -50,18 +50,18 @@ Token *tokenize(char *input);
 typedef struct Obj Obj;
 struct Obj {
     Obj *next;
-    char *name;   // 変数名
-    Type *ty;     // 型
-    int offset;   // RBPレジスタからのオフセット
-};
+    char *name;     // 変数名
+    Type *ty;       // 型
+    bool is_local;  // ローカルまたはグローバル変数
 
-// 関数
-typedef struct Function Function;
-struct Function {
-    Function *next;
-    char *name;
+    // ローカル変数
+    int offset;     // RBPレジスタからのオフセット
+
+    // グローバル変数または関数
+    bool is_function;
+
+    // 関数
     Obj *params;
-
     Node *body;
     Obj *locals;
     int stack_size;
@@ -118,7 +118,7 @@ struct Node {
     int val;       // kindがND_NUMの場合のみ使う
 };
 
-Function *parse(Token *tok);
+Obj *parse(Token *tok);
 
 //
 // type.c
@@ -171,4 +171,4 @@ void add_type(Node *node);
 // codegen.c
 //
 
-void codegen(Function *prog);
+void codegen(Obj *prog);

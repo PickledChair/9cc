@@ -2,7 +2,8 @@
 
 // パースしている間に作成されたすべてのローカル変数インスタンスは
 // この連結リストに積み重ねられていく
-Obj *locals;
+static Obj *locals;
+static Obj *globals;
 
 // ローカル変数を名前によって探す
 static Obj *find_var(Token *tok) {
@@ -49,13 +50,30 @@ static Node *new_var_node(Obj *var, Token *tok) {
     return node;
 }
 
+// 新しい変数を作成する
+static Obj *new_var(char *name, Type *ty) {
+    Obj *var = calloc(1, sizeof(Obj));
+    var->name = name;
+    var->ty = ty;
+    return var;
+}
+
 // 新しいローカル変数を作成する
 static Obj *new_lvar(char *name, Type *ty) {
-    Obj *var = calloc(1, sizeof(Obj));
+    Obj *var = new_var(name, ty);
+    var->is_local = true;
     var->name = name;
     var->ty = ty;
     var->next = locals;
     locals = var;
+    return var;
+}
+
+// 新しいグローバル変数を作成する
+static Obj *new_gvar(char *name, Type *ty) {
+    Obj *var = new_var(name, ty);
+    var->next = globals;
+    globals = var;
     return var;
 }
 
@@ -559,30 +577,30 @@ static void create_param_lvars(Type *param) {
 
 // function-definitionをパースする
 // function-definition = declspec declarator compound_stmt
-static Function *function(Token **rest, Token *tok) {
-    Type *ty = declspec(&tok, tok);
-    ty = declarator(&tok, tok, ty);
+static Token *function(Token *tok, Type *basety) {
+    Type *ty = declarator(&tok, tok, basety);
+
+    Obj *fn = new_gvar(get_ident(ty->name), ty);
+    fn->is_function = true;
 
     locals = NULL;
-
-    Function *fn = calloc(1, sizeof(Function));
-    fn->name = get_ident(ty->name);
     create_param_lvars(ty->params);
     fn->params = locals;
 
     tok = skip(tok, "{");
-    fn->body = compound_stmt(rest, tok);
+    fn->body = compound_stmt(&tok, tok);
     fn->locals = locals;
-    return fn;
+    return tok;
 }
 
 // programは複数のfunction-definitionからなる
-// program = function-definition*
-Function *parse(Token *tok) {
-    Function head = {};
-    Function *cur = &head;
+// program = (function-definition | global-variable)*
+Obj *parse(Token *tok) {
+    globals = NULL;
 
-    while (tok->kind != TK_EOF)
-        cur = cur->next = function(&tok, tok);
-    return head.next;
+    while (tok->kind != TK_EOF) {
+        Type *basety = declspec(&tok, tok);
+        tok = function(tok, basety);
+    }
+    return globals;
 }
