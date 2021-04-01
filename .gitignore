@@ -4,3 +4,4 @@ tmp*
 a.out
 chibicc
 
+*.code-workspace
