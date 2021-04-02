@@ -1,7 +1,10 @@
 #include "chibicc.h"
 
+// 入力されたファイル名
+static char *current_filename;
+
 // 入力プログラム
-static char *user_input;
+static char *current_input;
 
 void error(char *fmt, ...) {
     va_list ap;
@@ -11,9 +14,33 @@ void error(char *fmt, ...) {
     exit(1);
 }
 
+// 以下の書式でエラーメッセージを報告しexitする
+//
+// foo.c:10: x = y + 1;
+//               ^ <error message here>
 void verror_at(char *loc, char *fmt, va_list ap) {
-    int pos = loc - user_input;
-    fprintf(stderr, "%s\n", user_input);
+    // `loc` を含む行を探す
+    char *line = loc;
+    while (current_input < line && line[-1] != '\n')
+        line--;
+
+    char *end = loc;
+    while (*end != '\n')
+        end++;
+
+    // 行番号を取得
+    int line_no = 1;
+    for (char *p = current_input; p < line; p++)
+        if (*p == '\n')
+            line_no++;
+
+    // 該当の行を出力
+    int indent = fprintf(stderr, "%s:%d: ", current_filename, line_no);
+    fprintf(stderr, "%.*s\n", (int)(end - line), line);
+
+    // エラーメッセージを表示
+    int pos = loc - line + indent;
+
     fprintf(stderr, "%*s", pos, "");  // pos個の空白を出力
     fprintf(stderr, "^ ");
     vfprintf(stderr, fmt, ap);
@@ -199,8 +226,9 @@ static void convert_keywords(Token *tok) {
 }
 
 // 入力文字列pをトークナイズしてそれを返す
-Token *tokenize(char *p) {
-    user_input = p;
+static Token *tokenize(char *filename, char *p) {
+    current_filename = filename;
+    current_input = p;
     Token head = {};
     Token *cur = &head;
 
@@ -251,4 +279,46 @@ Token *tokenize(char *p) {
     cur = cur->next = new_token(TK_EOF, p, p);
     convert_keywords(head.next);
     return head.next;
+}
+
+// 与えられたファイルの内容を返す
+static char *read_file(char *path) {
+    FILE *fp;
+
+    if (strcmp(path, "-") == 0) {
+        // 慣習として、与えられたファイル名が "-" のときは stdin から読む
+        fp = stdin;
+    } else {
+        fp = fopen(path, "r");
+        if (!fp)
+            error("cannot open %s: %s", path, strerror(errno));
+    }
+
+    char *buf;
+    size_t buflen;
+    FILE *out = open_memstream(&buf, &buflen);
+
+    // ファイル全体を読む
+    for (;;) {
+        char buf2[4096];
+        int n = fread(buf2, 1, sizeof(buf2), fp);
+        if (n == 0)
+            break;
+        fwrite(buf2, 1, n, out);
+    }
+
+    if (fp != stdin)
+        fclose(fp);
+
+    // 最後の行が正しく '\n' で終わっていることを確認する
+    fflush(out);
+    if (buflen == 0 || buf[buflen - 1] != '\n')
+        fputc('\n', out);
+    fputc('\0', out);
+    fclose(out);
+    return buf;
+}
+
+Token *tokenize_file(char *path) {
+    return tokenize(path, read_file(path));
 }
