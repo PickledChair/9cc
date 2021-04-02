@@ -91,5 +91,17 @@ void add_type(Node *node) {
             error_tok(node->tok, "不正な参照外しです");
         node->ty = node->lhs->ty->base;
         return;
+    case ND_STMT_EXPR:
+        if (node->body) {
+            Node *stmt = node->body;
+            while (stmt->next)
+                stmt = stmt->next;
+            if (stmt->kind == ND_EXPR_STMT) {
+                node->ty = stmt->lhs->ty;
+                return;
+            }
+        }
+        error_tok(node->tok, "文式がvoidを返すことはサポートされていません");
+        return;
     }
 }

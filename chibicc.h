@@ -98,6 +98,7 @@ typedef enum {
     ND_BLOCK,     // { ... }
     ND_FUNCALL,   // 関数呼び出し
     ND_EXPR_STMT, // 式文
+    ND_STMT_EXPR, // 文式
     ND_VAR,       // 変数
     ND_NUM,       // 整数
 } NodeKind;
@@ -119,7 +120,7 @@ struct Node {
     Node *init;
     Node *inc;
 
-    // Block
+    // ブロックまたは文式
     Node *body;
 
     // 関数呼び出し

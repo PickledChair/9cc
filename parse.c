@@ -557,8 +557,21 @@ static Node *funcall(Token **rest, Token *tok) {
 }
 
 // primaryをパースする
-// primary = "(" expr ")" | "sizeof" unary | ident func-args? | str | num
+// primary = "(" "{" stmt+ "}" ")"
+//         | "(" expr ")"
+//         | "sizeof" unary
+//         | ident func-args?
+//         | str
+//         | num
 static Node *primary(Token **rest, Token *tok) {
+    // まずGNU拡張である式文が来る場合はそれをパースする
+    if (equal(tok, "(") && equal(tok->next, "{")) {
+        Node *node = new_node(ND_STMT_EXPR, tok);
+        node->body = compound_stmt(&tok, tok->next->next)->body;
+        *rest = skip(tok, ")");
+        return node;
+    }
+
     // 次のトークンが"("なら、"(" expr ")"のはず
     if (equal(tok, "(")) {
         Node *node = expr(&tok, tok->next);
@@ -566,6 +579,7 @@ static Node *primary(Token **rest, Token *tok) {
         return node;
     }
 
+    // sizeof演算子による演算結果はコンパイル時に決定される
     if (equal(tok, "sizeof")) {
         Node *node = unary(rest, tok->next);
         add_type(node);
