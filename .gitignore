@@ -1,7 +1,10 @@
-*~
-*.o
+**/*~
+**/\#*
+**/*.o
+**/*.s
 tmp*
-a.out
+**/a.out
 chibicc
+/test/*.exe
 
 *.code-workspace
