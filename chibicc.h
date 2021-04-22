@@ -42,6 +42,8 @@ struct Token {
     int len;        // トークンの長さ
     Type *ty;       // kindがTK_STRの場合に用いる
     char *str;      // 文字列リテラルの内容（終端はヌル文字 '\0'）
+
+    int line_no;    // 行番号
 };
 
 void error(char *fmt, ...);

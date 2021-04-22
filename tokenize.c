@@ -18,7 +18,7 @@ void error(char *fmt, ...) {
 //
 // foo.c:10: x = y + 1;
 //               ^ <error message here>
-void verror_at(char *loc, char *fmt, va_list ap) {
+void verror_at(int line_no, char *loc, char *fmt, va_list ap) {
     // `loc` を含む行を探す
     char *line = loc;
     while (current_input < line && line[-1] != '\n')
@@ -27,12 +27,6 @@ void verror_at(char *loc, char *fmt, va_list ap) {
     char *end = loc;
     while (*end != '\n')
         end++;
-
-    // 行番号を取得
-    int line_no = 1;
-    for (char *p = current_input; p < line; p++)
-        if (*p == '\n')
-            line_no++;
 
     // 該当の行を出力
     int indent = fprintf(stderr, "%s:%d: ", current_filename, line_no);
@@ -50,16 +44,22 @@ void verror_at(char *loc, char *fmt, va_list ap) {
 
 // tokenize に関するエラーを報告するための関数
 void error_at(char *loc, char *fmt, ...) {
+    // 行番号を取得
+    int line_no = 1;
+    for (char *p = current_input; p < loc; p++)
+        if (*p == '\n')
+            line_no++;
+
     va_list ap;
     va_start(ap, fmt);
-    verror_at(loc, fmt, ap);
+    verror_at(line_no, loc, fmt, ap);
 }
 
 // parse に関するエラーを報告するための関数
 void error_tok(Token *tok, char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    verror_at(tok->loc, fmt, ap);
+    verror_at(tok->line_no, tok->loc, fmt, ap);
 }
 
 // トークンが指定した演算子であるかどうかを返す
@@ -225,6 +225,21 @@ static void convert_keywords(Token *tok) {
             t->kind = TK_KEYWORD;
 }
 
+// 全てのトークンについて行の情報を初期化
+static void add_line_numbers(Token *tok) {
+    char *p = current_input;
+    int n = 1;
+
+    do {
+        if (p == tok->loc) {
+            tok->line_no = n;
+            tok = tok->next;
+        }
+        if (*p == '\n')
+            n++;
+    } while (*p++);
+}
+
 // 入力文字列pをトークナイズしてそれを返す
 static Token *tokenize(char *filename, char *p) {
     current_filename = filename;
@@ -294,6 +309,7 @@ static Token *tokenize(char *filename, char *p) {
     }
 
     cur = cur->next = new_token(TK_EOF, p, p);
+    add_line_numbers(head.next);
     convert_keywords(head.next);
     return head.next;
 }
