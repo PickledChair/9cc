@@ -93,6 +93,7 @@ typedef enum {
     ND_LT,        // <
     ND_LE,        // <=
     ND_ASSIGN,    // =
+    ND_COMMA,     // ,
     ND_ADDR,      // 単項演算子の &
     ND_DEREF,     // 単項演算子の *
     ND_RETURN,    // "return"
