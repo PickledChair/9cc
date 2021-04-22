@@ -57,6 +57,7 @@ int main(int argc, char **argv) {
 
     // ASTを走査してアセンブリを出力する
     FILE *out = open_file(opt_o);
+    fprintf(out, ".file 1 \"%s\"\n", input_path);
     codegen(prog, out);
     return 0;
 }
