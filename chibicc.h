@@ -10,6 +10,7 @@
 
 typedef struct Type Type;
 typedef struct Node Node;
+typedef struct Member Member;
 
 //
 // strings.c
@@ -94,6 +95,7 @@ typedef enum {
     ND_LE,        // <=
     ND_ASSIGN,    // =
     ND_COMMA,     // ,
+    ND_MEMBER,    // . (構造体メンバへのアクセス)
     ND_ADDR,      // 単項演算子の &
     ND_DEREF,     // 単項演算子の *
     ND_RETURN,    // "return"
@@ -127,6 +129,9 @@ struct Node {
     // ブロックまたは文式
     Node *body;
 
+    // 構造体メンバへのアクセス
+    Member *member;
+
     // 関数呼び出し
     char *funcname;
     Node *args;
@@ -146,7 +151,8 @@ typedef enum {
     TY_INT,
     TY_PTR,
     TY_FUNC,
-    TY_ARRAY
+    TY_ARRAY,
+    TY_STRUCT
 } TypeKind;
 
 struct Type {
@@ -170,10 +176,21 @@ struct Type {
     // 配列
     int array_len;
 
+    // 構造体
+    Member *members;
+
     // 関数の型
     Type *return_ty;
     Type *params;
     Type *next;
+};
+
+// 構造体メンバ
+struct Member {
+    Member *next;
+    Type *ty;
+    Token *name;
+    int offset;
 };
 
 extern Type *ty_char;
