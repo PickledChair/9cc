@@ -183,13 +183,15 @@ static Node *relational(Token **rest, Token *tok);
 static Node *add(Token **rest, Token *tok);
 static Node *mul(Token **rest, Token *tok);
 static Type *struct_decl(Token **rest, Token *tok);
+static Type *union_decl(Token **rest, Token *tok);
 static Node *postfix(Token **rest, Token *tok);
 static Node *unary(Token **rest, Token *tok);
 static Node *primary(Token **rest, Token *tok);
 
 // 与えられたトークンが型を表している場合、trueを返す
 static bool is_typename(Token *tok) {
-    return equal(tok, "char") || equal(tok, "int") || equal(tok, "struct");
+    return equal(tok, "char") || equal(tok, "int") || equal(tok, "struct") ||
+           equal(tok, "union");
 }
 
 // stmtをパースする
@@ -301,6 +303,10 @@ static Type *declspec(Token **rest, Token *tok) {
 
     if (equal(tok, "struct")) {
         return struct_decl(rest, tok->next);
+    }
+
+    if (equal(tok, "union")) {
+        return union_decl(rest, tok->next);
     }
 
     error_tok(tok, "型名が必要です");
@@ -630,9 +636,9 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
     ty->members = head.next;
 }
 
-// struct-declをパースする
-// struct-decl = ident? "{" struct-members
-static Type *struct_decl(Token **rest, Token *tok) {
+// struct-union-declをパースする
+// struct-union-decl = ident? ("{" struct-members)?
+static Type *struct_union_decl(Token **rest, Token *tok) {
     // 構造体タグを読む
     Token *tag = NULL;
     if (tok->kind == TK_IDENT) {
@@ -654,6 +660,18 @@ static Type *struct_decl(Token **rest, Token *tok) {
     struct_members(rest, tok->next, ty);
     ty->align = 1;
 
+    // もし構造体名が与えられていたら、その構造体型を登録する
+    if (tag)
+        push_tag_scope(tag, ty);
+    return ty;
+}
+
+// struct-decl をパースする
+// struct-decl = struct-union-decl
+static Type *struct_decl(Token **rest, Token *tok) {
+    Type *ty = struct_union_decl(rest, tok);
+    ty->kind = TY_STRUCT;
+
     // 構造体内でのオフセットを各メンバに代入する
     int offset = 0;
     for (Member *mem = ty->members; mem; mem = mem->next) {
@@ -665,10 +683,25 @@ static Type *struct_decl(Token **rest, Token *tok) {
             ty->align = mem->ty->align;
     }
     ty->size = align_to(offset, ty->align);
+    return ty;
+}
 
-    // もし構造体名が与えられていたら、その構造体型を登録する
-    if (tag)
-        push_tag_scope(tag, ty);
+// union-decl をパースする
+// union-decl = struct-union-decl
+static Type *union_decl(Token **rest, Token *tok) {
+    Type *ty = struct_union_decl(rest, tok);
+    ty->kind = TY_UNION;
+
+    // もし共用体なら、オフセットを代入する必要はない。なぜなら、
+    // それらはすでにゼロで初期化されているからである。それでも、
+    // アラインメントとサイズを計算する必要はある。
+    for (Member *mem = ty->members; mem; mem = mem->next) {
+        if (ty->align < mem->ty->align)
+            ty->align = mem->ty->align;
+        if (ty->size < mem->ty->size)
+            ty->size = mem->ty->size;
+    }
+    ty->size = align_to(ty->size, ty->align);
     return ty;
 }
 
@@ -684,8 +717,8 @@ static Member *get_struct_member(Type *ty, Token *tok) {
 // 構造体メンバへのアクセスに必要な情報を集める
 static Node *struct_ref(Node *lhs, Token *tok) {
     add_type(lhs);
-    if (lhs->ty->kind != TY_STRUCT)
-        error_tok(lhs->tok, "構造体ではありません");
+    if (lhs->ty->kind != TY_STRUCT && lhs->ty->kind != TY_UNION)
+        error_tok(lhs->tok, "構造体でも共用体でもありません");
 
     Node *node = new_unary(ND_MEMBER, lhs, tok);
     node->member = get_struct_member(lhs->ty, tok);
