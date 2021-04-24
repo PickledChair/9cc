@@ -8,16 +8,30 @@ struct VarScope {
     Obj *var;
 };
 
+// 構造体タグのためのスコープ
+typedef struct TagScope TagScope;
+struct TagScope {
+    TagScope *next;
+    char *name;
+    Type *ty;
+};
+
 // ブロックスコープの表現
 typedef struct Scope Scope;
 struct Scope {
     Scope *next;
+
+    // C は２つのブロックスコープを持っている。一つは変数のための。
+    // もう一つは構造体タグのためのものである。
     VarScope *vars;
+    TagScope *tags;
 };
 
 // パースしている間に作成されたすべてのローカル変数インスタンスは
-// この連結リストに積み重ねられていく
+// このスタックに積み重ねられていく
 static Obj *locals;
+
+// ローカル変数と同様、グローバル変数もこのスタックに積み重ねる
 static Obj *globals;
 
 static Scope *scope = &(Scope){};
@@ -40,6 +54,15 @@ static Obj *find_var(Token *tok) {
         for (VarScope *sc2 = sc->vars; sc2; sc2 = sc2->next)
             if (equal(tok, sc2->name))
                 return sc2->var;
+    return NULL;
+}
+
+// 構造体タグを名前によって探す
+static Type *find_tag(Token *tok) {
+    for (Scope *sc = scope; sc; sc = sc->next)
+        for (TagScope *sc2 = sc->tags; sc2; sc2 = sc2->next)
+            if (equal(tok, sc2->name))
+                return sc2->ty;
     return NULL;
 }
 
@@ -252,6 +275,15 @@ static Node *compound_stmt(Token **rest, Token *tok) {
     node->body = head.next;
     *rest = tok->next;
     return node;
+}
+
+// 新しい TagScope を現在のスコープにプッシュする
+static void push_tag_scope(Token *tok, Type *ty) {
+    TagScope *sc = calloc(1, sizeof(TagScope));
+    sc->name = strndup(tok->loc, tok->len);
+    sc->ty = ty;
+    sc->next = scope->tags;
+    scope->tags = sc;
 }
 
 // declspecをパースする
@@ -599,14 +631,27 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
 }
 
 // struct-declをパースする
-// struct-decl = "{" struct-members
+// struct-decl = ident? "{" struct-members
 static Type *struct_decl(Token **rest, Token *tok) {
-    tok = skip(tok, "{");
+    // 構造体タグを読む
+    Token *tag = NULL;
+    if (tok->kind == TK_IDENT) {
+        tag = tok;
+        tok = tok->next;
+    }
+
+    if (tag && !equal(tok, "{")) {
+        Type *ty = find_tag(tag);
+        if (!ty)
+            error_tok(tag, "不明な構造体型です");
+        *rest = tok;
+        return ty;
+    }
 
     // 構造体オブジェクトをコンストラクトする
     Type *ty = calloc(1, sizeof(Type));
     ty->kind = TY_STRUCT;
-    struct_members(rest, tok, ty);
+    struct_members(rest, tok->next, ty);
     ty->align = 1;
 
     // 構造体内でのオフセットを各メンバに代入する
@@ -621,6 +666,9 @@ static Type *struct_decl(Token **rest, Token *tok) {
     }
     ty->size = align_to(offset, ty->align);
 
+    // もし構造体名が与えられていたら、その構造体型を登録する
+    if (tag)
+        push_tag_scope(tag, ty);
     return ty;
 }
 
