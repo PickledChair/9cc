@@ -159,6 +159,7 @@ struct Type {
     TypeKind kind;
 
     int size;    // sizeof() value
+    int align;   // アラインメント
 
     // pointer-to 型、または array-of 型。C においてはポインタと配列は意味的に
     // 重複しているため、意図的に同じメンバ変数を用いている。
@@ -208,3 +209,4 @@ void add_type(Node *node);
 //
 
 void codegen(Obj *prog, FILE *out);
+int align_to(int n, int align);

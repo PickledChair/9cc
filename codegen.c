@@ -34,7 +34,7 @@ static void pop(char *arg) {
 
 // nを最も近いalignの倍数に切り上げる。例えば、
 // align_to(5, 8)は8を返し、align_to(11, 8)は16を返す
-static int align_to(int n, int align) {
+int align_to(int n, int align) {
     return (n + align - 1) / align * align;
 }
 
