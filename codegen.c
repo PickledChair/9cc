@@ -69,7 +69,7 @@ static void gen_addr(Node *node) {
 
 // %raxレジスタの値が指し示しているアドレスから%raxレジスタに値をロードする
 static void load(Type *ty) {
-    if (ty->kind == TY_ARRAY) {
+    if (ty->kind == TY_ARRAY || ty->kind == TY_STRUCT || ty->kind == TY_UNION) {
         // もしそれが配列なら、レジスタに値をロードしようとはしないように。
         // なぜなら、一般的に配列全体を一つのレジスタにロードすることはでき
         // ないからである。結果として、配列を評価した結果は配列そのものでは
@@ -88,6 +88,14 @@ static void load(Type *ty) {
 // スタックトップの値が指し示しているアドレスに%raxレジスタの値をストアする
 static void store(Type *ty) {
     pop("%rdi");
+
+    if (ty->kind == TY_STRUCT || ty->kind == TY_UNION) {
+        for (int i = 0; i < ty->size; i++) {
+            println("  mov %d(%%rax), %%r8b", i);
+            println("  mov %%r8b, %d(%%rdi)", i);
+        }
+        return;
+    }
 
     if (ty->size == 1)
         println("  mov %%al, (%%rdi)");
