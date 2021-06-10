@@ -76,6 +76,7 @@ struct Obj {
 
     // グローバル変数または関数
     bool is_function;
+    bool is_definition;
 
     // グローバル変数
     char *init_data;
