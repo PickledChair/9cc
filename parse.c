@@ -295,43 +295,86 @@ static void push_tag_scope(Token *tok, Type *ty) {
 }
 
 // declspecをパースする
-// declspec = "void" | "char" | "short" | "int" | "long"
-//           | struct-decl | union-decl
+// declspec = ("void" | "char" | "short" | "int" | "long"
+//              | struct-decl | union-decl)+
+//
+// 型指定子の中の型名の順番は重要ではない。例えば、`int long static` は
+// `static long int` と同じ意味である。これは、`long`や`short`が指定されて
+// いれば、`int`を省略することができるので、`static long`と書くこともできる。
+// しかし、`char int`のようなものは有効な型指定子ではない。限られた型名の組み
+// 合わせのみを受け入れる必要がある。
+//
+// この関数では，それまでの型名が表す「現在の」型オブジェクトを維持したまま，
+// 各型名の出現回数を数える。型名ではないトークンに到達すると，現在の型オブジェクト
+// を返す。
 static Type *declspec(Token **rest, Token *tok) {
-    if (equal(tok, "void")) {
-        *rest = tok->next;
-        return ty_void;
+    // すべての型名のカウンターとして1つの整数を使用する。例えば、ビット0と
+    // ビット1は、これまでに "void" というキーワードを何回見たかを表している。
+    // これを利用して、以下のようにswitch文を使うことができる。
+    enum {
+        VOID  = 1 << 0,
+        CHAR  = 1 << 2,
+        SHORT = 1 << 4,
+        INT   = 1 << 6,
+        LONG  = 1 << 8,
+        OTHER = 1 << 10,
+    };
+
+    Type *ty = ty_int;
+    int counter = 0;
+
+    while (is_typename(tok)) {
+        // ユーザー定義型を扱う
+        if (equal(tok, "struct") || equal(tok, "union")) {
+            if (equal(tok, "struct"))
+                ty = struct_decl(&tok, tok->next);
+            else
+                ty = union_decl(&tok, tok->next);
+            counter += OTHER;
+            continue;
+        }
+
+        // 組み込み型を扱う
+        if (equal(tok, "void"))
+            counter += VOID;
+        else if (equal(tok, "char"))
+            counter += CHAR;
+        else if (equal(tok, "short"))
+            counter += SHORT;
+        else if (equal(tok, "int"))
+            counter += INT;
+        else if (equal(tok, "long"))
+            counter += LONG;
+        else
+            unreachable();
+
+        switch (counter) {
+        case VOID:
+            ty = ty_void;
+            break;
+        case CHAR:
+            ty = ty_char;
+            break;
+        case SHORT:
+        case SHORT + INT:
+            ty = ty_short;
+            break;
+        case INT:
+            ty = ty_int;
+            break;
+        case LONG:
+        case LONG + INT:
+            ty = ty_long;
+            break;
+        default:
+            error_tok(tok, "不正な型です");
+        }
+
+        tok = tok->next;
     }
 
-    if (equal(tok, "char")) {
-        *rest = tok->next;
-        return ty_char;
-    }
-
-    if (equal(tok, "short")) {
-        *rest = tok->next;
-        return ty_short;
-    }
-
-    if (equal(tok, "int")) {
-        *rest = tok->next;
-        return ty_int;
-    }
-
-    if (equal(tok, "long")) {
-        *rest = tok->next;
-        return ty_long;
-    }
-
-    if (equal(tok, "struct")) {
-        return struct_decl(rest, tok->next);
-    }
-
-    if (equal(tok, "union")) {
-        return union_decl(rest, tok->next);
-    }
-
-    error_tok(tok, "型名が必要です");
+    *rest = tok;
+    return ty;
 }
 
 // func-paramsをパースする
