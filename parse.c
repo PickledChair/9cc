@@ -1,11 +1,12 @@
 #include "chibicc.h"
 
-// ローカル変数またはグローバル変数のためのスコープ
+// ローカル・グローバル変数または typedef のためのスコープ
 typedef struct VarScope VarScope;
 struct VarScope {
     VarScope *next;
     char *name;
     Obj *var;
+    Type *type_def;
 };
 
 // 構造体タグのためのスコープ
@@ -26,6 +27,11 @@ struct Scope {
     VarScope *vars;
     TagScope *tags;
 };
+
+// typedef や extern といった変数の属性
+typedef struct {
+    bool is_typedef;
+} VarAttr;
 
 // パースしている間に作成されたすべてのローカル変数インスタンスは
 // このスタックに積み重ねられていく
@@ -49,11 +55,11 @@ static void leave_scope(void) {
 }
 
 // ローカル変数を名前によって探す
-static Obj *find_var(Token *tok) {
+static VarScope *find_var(Token *tok) {
     for (Scope *sc = scope; sc; sc = sc->next)
         for (VarScope *sc2 = sc->vars; sc2; sc2 = sc2->next)
             if (equal(tok, sc2->name))
-                return sc2->var;
+                return sc2;
     return NULL;
 }
 
@@ -104,10 +110,9 @@ static Node *new_var_node(Obj *var, Token *tok) {
 }
 
 // 現在のスコープの変数スタックに新しい変数をプッシュする
-static VarScope *push_scope(char *name, Obj *var) {
+static VarScope *push_scope(char *name) {
     VarScope *sc = calloc(1, sizeof(VarScope));
     sc->name = name;
-    sc->var = var;
     sc->next = scope->vars;
     scope->vars = sc;
     return sc;
@@ -118,7 +123,7 @@ static Obj *new_var(char *name, Type *ty) {
     Obj *var = calloc(1, sizeof(Obj));
     var->name = name;
     var->ty = ty;
-    push_scope(name, var);
+    push_scope(name)->var = var;
     return var;
 }
 
@@ -163,6 +168,15 @@ static char *get_ident(Token *tok) {
     return strndup(tok->loc, tok->len);
 }
 
+static Type *find_typedef(Token *tok) {
+    if (tok->kind == TK_IDENT) {
+        VarScope *sc = find_var(tok);
+        if (sc)
+            return sc->type_def;
+    }
+    return NULL;
+}
+
 // 数値のトークンから数値を得る
 static int get_number(Token *tok) {
     if (tok->kind != TK_NUM)
@@ -172,9 +186,9 @@ static int get_number(Token *tok) {
 
 static Node *stmt(Token **rest, Token *tok);
 static Node *compound_stmt(Token **rest, Token *tok);
-static Type *declspec(Token **rest, Token *tok);
+static Type *declspec(Token **rest, Token *tok, VarAttr *attr);
 static Type *declarator(Token **rest, Token *tok, Type* ty);
-static Node *declaration(Token **rest, Token *tok);
+static Node *declaration(Token **rest, Token *tok, Type *basety);
 static Node *expr_stmt(Token **rest, Token *tok);
 static Node *assign(Token **rest, Token *tok);
 static Node *expr(Token **rest, Token *tok);
@@ -187,17 +201,19 @@ static Type *union_decl(Token **rest, Token *tok);
 static Node *postfix(Token **rest, Token *tok);
 static Node *unary(Token **rest, Token *tok);
 static Node *primary(Token **rest, Token *tok);
+static Token *parse_typedef(Token *tok, Type *basety);
 
 // 与えられたトークンが型を表している場合、trueを返す
 static bool is_typename(Token *tok) {
     static char *kw[] = {
-        "void", "char", "short", "int", "long", "struct", "union"
+        "void", "char", "short", "int", "long", "struct", "union",
+        "typedef"
     };
 
     for (int i = 0; i < sizeof(kw) / sizeof(*kw); i++)
         if (equal(tok, kw[i]))
             return true;
-    return false;
+    return find_typedef(tok);
 }
 
 // stmtをパースする
@@ -261,7 +277,7 @@ static Node *stmt(Token **rest, Token *tok) {
 }
 
 // compound-stmtをパースする
-// compound-stmt = (declaration | stmt)* "}"
+// compound-stmt = (typedef | declaration | stmt)* "}"
 static Node *compound_stmt(Token **rest, Token *tok) {
     Node *node = new_node(ND_BLOCK, tok);
 
@@ -271,10 +287,19 @@ static Node *compound_stmt(Token **rest, Token *tok) {
     enter_scope();
 
     while (!equal(tok, "}")) {
-        if (is_typename(tok))
-            cur = cur->next = declaration(&tok, tok);
-        else
+        if (is_typename(tok)) {
+            VarAttr attr = {};
+            Type *basety = declspec(&tok, tok, &attr);
+
+            if (attr.is_typedef) {
+                tok = parse_typedef(tok, basety);
+                continue;
+            }
+
+            cur = cur->next = declaration(&tok, tok, basety);
+        } else {
             cur = cur->next = stmt(&tok, tok);
+        }
         add_type(cur);
     }
 
@@ -296,7 +321,8 @@ static void push_tag_scope(Token *tok, Type *ty) {
 
 // declspecをパースする
 // declspec = ("void" | "char" | "short" | "int" | "long"
-//              | struct-decl | union-decl)+
+//              | "typedef"
+//              | struct-decl | union-decl | typedef-name)+
 //
 // 型指定子の中の型名の順番は重要ではない。例えば、`int long static` は
 // `static long int` と同じ意味である。これは、`long`や`short`が指定されて
@@ -307,7 +333,7 @@ static void push_tag_scope(Token *tok, Type *ty) {
 // この関数では，それまでの型名が表す「現在の」型オブジェクトを維持したまま，
 // 各型名の出現回数を数える。型名ではないトークンに到達すると，現在の型オブジェクト
 // を返す。
-static Type *declspec(Token **rest, Token *tok) {
+static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     // すべての型名のカウンターとして1つの整数を使用する。例えば、ビット0と
     // ビット1は、これまでに "void" というキーワードを何回見たかを表している。
     // これを利用して、以下のようにswitch文を使うことができる。
@@ -324,12 +350,30 @@ static Type *declspec(Token **rest, Token *tok) {
     int counter = 0;
 
     while (is_typename(tok)) {
+        // "typedef" キーワードを扱う
+        if (equal(tok, "typedef")) {
+            if (!attr)
+                error_tok(tok, "このコンテキストではストレージクラス指定子は許可されていません");
+            attr->is_typedef = true;
+            tok = tok->next;
+            continue;
+        }
+
         // ユーザー定義型を扱う
-        if (equal(tok, "struct") || equal(tok, "union")) {
-            if (equal(tok, "struct"))
+        Type *ty2 = find_typedef(tok);
+        if (equal(tok, "struct") || equal(tok, "union") || ty2) {
+            if (counter)
+                break;
+
+            if (equal(tok, "struct")) {
                 ty = struct_decl(&tok, tok->next);
-            else
+            } else if (equal(tok, "union")) {
                 ty = union_decl(&tok, tok->next);
+            } else {
+                ty = ty2;
+                tok = tok->next;
+            }
+
             counter += OTHER;
             continue;
         }
@@ -389,7 +433,7 @@ static Type *func_params(Token **rest, Token *tok, Type *ty) {
     while (!equal(tok, ")")) {
         if (cur != &head)
             tok = skip(tok, ",");
-        Type *basety = declspec(&tok, tok);
+        Type *basety = declspec(&tok, tok, NULL);
         Type *ty = declarator(&tok, tok, basety);
         cur = cur->next = copy_type(ty);
     }
@@ -444,9 +488,7 @@ static Type *declarator(Token **rest, Token *tok, Type *ty) {
 
 // declarationをパースする
 // declaration = declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*)? ";"
-static Node *declaration(Token **rest, Token *tok) {
-    Type *basety = declspec(&tok, tok);
-
+static Node *declaration(Token **rest, Token *tok, Type *basety) {
     Node head = {};
     Node *cur = &head;
     int i = 0;
@@ -697,7 +739,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
     Member *cur = &head;
 
     while(!equal(tok, "}")) {
-        Type *basety = declspec(&tok, tok);
+        Type *basety = declspec(&tok, tok, NULL);
         int i = 0;
 
         while (!consume(&tok, tok, ";")) {
@@ -898,11 +940,11 @@ static Node *primary(Token **rest, Token *tok) {
             return funcall(rest, tok);
 
         // 識別子のみの場合は変数
-        Obj *var = find_var(tok);
-        if (!var)
+        VarScope *sc = find_var(tok);
+        if (!sc || !sc->var)
             error_tok(tok, "未定義な変数です");
         *rest = tok->next;
-        return new_var_node(var, tok);
+        return new_var_node(sc->var, tok);
     }
 
     // 文字列リテラル
@@ -921,6 +963,21 @@ static Node *primary(Token **rest, Token *tok) {
 
     // いずれでもなければそれは式ではない
     error_tok(tok, "式が必要です");
+}
+
+// typedefをパースする
+static Token *parse_typedef(Token *tok, Type *basety) {
+    bool first = true;
+
+    while (!consume(&tok, tok, ";")) {
+        if (!first)
+            tok = skip(tok, ",");
+        first = false;
+
+        Type *ty = declarator(&tok, tok, basety);
+        push_scope(get_ident(ty->name))->type_def = ty;
+    }
+    return tok;
 }
 
 static void create_param_lvars(Type *param) {
@@ -982,12 +1039,19 @@ static bool is_function(Token *tok) {
 }
 
 // programをパースする
-// program = (function-definition | global-variable)*
+// program = (typedef | function-definition | global-variable)*
 Obj *parse(Token *tok) {
     globals = NULL;
 
     while (tok->kind != TK_EOF) {
-        Type *basety = declspec(&tok, tok);
+        VarAttr attr = {};
+        Type *basety = declspec(&tok, tok, &attr);
+
+        // Typedef
+        if (attr.is_typedef) {
+            tok = parse_typedef(tok, basety);
+            continue;
+        }
 
         // 関数
         if (is_function(tok)) {
